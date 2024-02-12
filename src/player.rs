@@ -1,3 +1,5 @@
+use std::usize;
+
 use bevy::transform::TransformSystem;
 
 use crate::*;
@@ -76,7 +78,8 @@ fn set_row(indicies: &mut AnimIndices, sprite: &mut TextureAtlasSprite, new_row:
     if new_row == indicies.row {
         return;
     } else {
+        let current_index = sprite.index - indicies.offset();
         indicies.row = new_row;
-        sprite.index = indicies.offset();
+        sprite.index = current_index + indicies.offset();
     }
 }

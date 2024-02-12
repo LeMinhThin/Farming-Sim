@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, render::camera::ScalingMode};
 use bevy_ecs_ldtk::prelude::*;
 use bevy_xpbd_2d::prelude::*;
 
@@ -26,6 +26,7 @@ fn main() {
 fn setup(mut commands: Commands, assets_server: Res<AssetServer>) {
     let mut camera = Camera2dBundle::default();
     camera.projection.scale = 0.5;
+    camera.projection.scaling_mode = ScalingMode::Fixed { width: 1280., height: 720. };
 
     commands.spawn(camera);
 
@@ -51,8 +52,7 @@ fn animate(
         }
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
-            let sprite_count = indicies.last - indicies.first + 1;
-            let sprite_offset = (indicies.row - 1) * sprite_count;
+            let sprite_offset = indicies.offset();
             if sprite.index >= indicies.last + sprite_offset {
                 sprite.index = indicies.first + sprite_offset
             } else {
