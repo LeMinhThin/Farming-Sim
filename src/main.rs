@@ -25,8 +25,11 @@ fn main() {
 
 fn setup(mut commands: Commands, assets_server: Res<AssetServer>) {
     let mut camera = Camera2dBundle::default();
-    camera.projection.scale = 0.5;
-    camera.projection.scaling_mode = ScalingMode::Fixed { width: 1280., height: 720. };
+    camera.projection.scale = 0.4;
+    camera.projection.scaling_mode = ScalingMode::Fixed {
+        width: 1280.,
+        height: 720.,
+    };
 
     commands.spawn(camera);
 

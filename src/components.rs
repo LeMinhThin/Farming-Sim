@@ -12,6 +12,7 @@ pub struct PlayerBundle {
     player: Player,
     collider_bundle: ColliderBundle,
     sprites: Anim,
+    state: PlayerState,
 }
 
 #[derive(Default, Bundle)]
@@ -21,8 +22,18 @@ pub struct Anim {
     pub timer: AnimTimer,
 }
 
+#[derive(Component, Default, States, Debug, Clone, Eq, PartialEq, Hash)]
+pub enum PlayerState {
+    #[default]
+    Normal,
+    UsingTool,
+}
+
 #[derive(Component, Default)]
 pub struct AnimTimer(pub Timer);
+
+#[derive(Component, Default)]
+pub struct ActionTimer(pub Timer);
 
 #[derive(Component, Default)]
 pub struct AnimIndices {
@@ -35,7 +46,7 @@ pub struct AnimIndices {
 impl AnimIndices {
     pub fn offset(&self) -> usize {
         let sprite_count = self.last - self.first + 1;
-        (self.row - 1) * sprite_count
+        self.row * sprite_count
     }
 }
 
@@ -77,12 +88,12 @@ impl LdtkEntity for PlayerBundle {
     ) -> Self {
         let texture_handle = asset_server.load("res/Characters/Basic Charakter Spritesheet.png");
         let texture_atlas =
-            TextureAtlas::from_grid(texture_handle, vec2(48., 48.), 4, 4, None, None);
+            TextureAtlas::from_grid(texture_handle, vec2(48., 48.), 4, 6, None, None);
         let texture_atlas_handle = texture_atlases.add(texture_atlas);
         let anim_indices = AnimIndices {
             first: 0,
             last: 3,
-            row: 2,
+            row: 0,
             stopped: false,
         };
         let anim = Anim {
@@ -98,6 +109,7 @@ impl LdtkEntity for PlayerBundle {
             player: Player,
             collider_bundle: ColliderBundle::from(entity_instance),
             sprites: anim,
+            state: PlayerState::default(),
         }
     }
 }
