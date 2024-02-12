@@ -41,15 +41,23 @@ fn move_entities(mut entities: Query<(&Acceleration, &mut LinearVelocity)>, time
     }
 }
 
-fn animate(mut query: Query<(&AnimIndices, &mut AnimTimer, &mut TextureAtlasSprite)>, time: Res<Time>) {
+fn animate(
+    mut query: Query<(&AnimIndices, &mut AnimTimer, &mut TextureAtlasSprite)>,
+    time: Res<Time>,
+) {
     for (indicies, mut timer, mut sprite) in query.iter_mut() {
+        if indicies.stopped {
+            continue;
+        }
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
-            sprite.index = if sprite.index == indicies.last {
-                indicies.first
+            let sprite_count = indicies.last - indicies.first + 1;
+            let sprite_offset = (indicies.row - 1) * sprite_count;
+            if sprite.index >= indicies.last + sprite_offset {
+                sprite.index = indicies.first + sprite_offset
             } else {
-                sprite.index + 1
+                sprite.index += 1
             }
         }
-    };
+    }
 }

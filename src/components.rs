@@ -28,6 +28,15 @@ pub struct AnimTimer(pub Timer);
 pub struct AnimIndices {
     pub first: usize,
     pub last: usize,
+    pub row: usize,
+    pub stopped: bool,
+}
+
+impl AnimIndices {
+    pub fn offset(&self) -> usize {
+        let sprite_count = self.last - self.first + 1;
+        (self.row - 1) * sprite_count
+    }
 }
 
 #[derive(Default, Component)]
@@ -70,7 +79,12 @@ impl LdtkEntity for PlayerBundle {
         let texture_atlas =
             TextureAtlas::from_grid(texture_handle, vec2(48., 48.), 4, 4, None, None);
         let texture_atlas_handle = texture_atlases.add(texture_atlas);
-        let anim_indices = AnimIndices { first: 0, last: 3 };
+        let anim_indices = AnimIndices {
+            first: 0,
+            last: 3,
+            row: 2,
+            stopped: false,
+        };
         let anim = Anim {
             sprites: SpriteSheetBundle {
                 texture_atlas: texture_atlas_handle,
