@@ -1,7 +1,6 @@
-use bevy::prelude::*;
-use bevy::transform::TransformSystem;
-
-use crate::*;
+use bevy::{prelude::*, transform::TransformSystem};
+use crate::components::*;
+use bevy_xpbd_2d::prelude::*;
 
 const SPEED: f32 = 100.;
 
@@ -34,15 +33,12 @@ fn update_player_anim(
     let Ok(player_vel) = player.get_single() else {
         return;
     };
-    let Ok((mut indicies, mut atlas)) = player_sprite.get_single_mut() else {
+    let Ok((mut anim, mut atlas)) = player_sprite.get_single_mut() else {
         return;
     };
 
-    let mut spr_row = indicies.row;
     let mut flip = atlas.flip_x;
-
-    let spr_count = indicies.last - indicies.first + 1;
-    let offset = atlas.index % spr_count;
+    let mut spr_row = anim.row;
 
     if player_vel.y > 0. {
         spr_row = 1;
@@ -60,14 +56,15 @@ fn update_player_anim(
         spr_row = 2;
         flip = false;
     }
+
+    anim.row = spr_row;
     atlas.flip_x = flip;
-    indicies.row = spr_row;
     if player_vel.length() < 1. {
-        atlas.index = spr_count * spr_row;
-        indicies.stopped = true;
+        anim.stopped = true;
+        atlas.index = anim.spr_count() * anim.row;
     } else {
-        atlas.index = spr_row * spr_count + offset;
-        indicies.stopped = false;
+        atlas.index = anim.spr_count() * anim.row + atlas.index % anim.spr_count();
+        anim.stopped = false;
     }
 }
 
@@ -86,20 +83,30 @@ fn move_camera(
 
 fn update_state(
     mut next_state: ResMut<NextState<PlayerState>>,
-    mut player: Query<(Entity, &mut AnimIndices, &mut TextureAtlasSprite), With<Player>>,
+    mut player: Query<
+        (
+            Entity,
+            &mut AnimIndices,
+            &mut TextureAtlasSprite,
+            &mut LinearVelocity,
+        ),
+        With<Player>,
+    >,
     mut commands: Commands,
     input: Res<Input<MouseButton>>,
 ) {
-    let Ok((player_id, mut indicies, mut atlas)) = player.get_single_mut() else {
+    let Ok((player_id, mut anim, mut atlas, mut vel)) = player.get_single_mut() else {
         return;
     };
     if input.just_pressed(MouseButton::Left) {
-        let spr_count = indicies.last - indicies.first + 1;
         let action_timer = ActionTimer(Timer::from_seconds(0.5, TimerMode::Once));
 
-        indicies.row += 3;
-        indicies.stopped = false;
-        atlas.index = spr_count * indicies.row;
+        anim.row += 3;
+        atlas.index = anim.spr_count() * anim.row;
+        anim.stopped = false;
+        vel.x = 0.;
+        vel.y = 0.;
+
         next_state.set(PlayerState::UsingTool);
         commands.entity(player_id).insert(action_timer);
     }
@@ -107,11 +114,19 @@ fn update_state(
 
 fn use_tool(
     mut next_state: ResMut<NextState<PlayerState>>,
-    mut player: Query<(&mut ActionTimer, &mut AnimIndices, Entity), With<Player>>,
+    mut player: Query<
+        (
+            &mut ActionTimer,
+            &mut AnimIndices,
+            &mut TextureAtlasSprite,
+            Entity,
+        ),
+        With<Player>,
+    >,
     mut commands: Commands,
     time: Res<Time>,
 ) {
-    let Ok((mut timer,mut indices, player_id)) = player.get_single_mut() else {
+    let Ok((mut timer, mut anim, mut atlas, player_id)) = player.get_single_mut() else {
         return;
     };
     timer.0.tick(time.delta());
@@ -119,12 +134,13 @@ fn use_tool(
         // Really weird bug
         // If the operation below was remove, the player's animation wouldn't play
         // using let _ = as per the complier's help message will break the animation
-        3 + 1;
+        //3 + 1;
     }
     if timer.0.just_finished() {
         commands.entity(player_id).remove::<ActionTimer>();
         next_state.set(PlayerState::Normal);
-        indices.row -= 3;
+        anim.row -= 3;
+        atlas.index = anim.spr_count() * anim.row;
     }
 }
 

@@ -969,16 +969,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_test"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy_ecs_ldtk",
- "bevy_ecs_tilemap",
- "bevy_xpbd_2d",
-]
-
-[[package]]
 name = "bevy_text"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1725,6 +1715,16 @@ checksum = "feedafcaa9b749175d5ac357452a9d41ea2911da598fde46ce1fe02c37751291"
 dependencies = [
  "event-listener 5.0.0",
  "pin-project-lite",
+]
+
+[[package]]
+name = "farming_sim"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_ecs_ldtk",
+ "bevy_ecs_tilemap",
+ "bevy_xpbd_2d",
 ]
 
 [[package]]

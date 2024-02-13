@@ -40,6 +40,7 @@ pub struct AnimIndices {
     pub first: usize,
     pub last: usize,
     pub row: usize,
+    pub cell: usize,
     pub stopped: bool,
 }
 
@@ -47,6 +48,10 @@ impl AnimIndices {
     pub fn offset(&self) -> usize {
         let sprite_count = self.last - self.first + 1;
         self.row * sprite_count
+    }
+
+    pub fn spr_count(&self) -> usize {
+        self.last - self.first + 1
     }
 }
 
@@ -94,6 +99,7 @@ impl LdtkEntity for PlayerBundle {
             first: 0,
             last: 3,
             row: 0,
+            cell: 0,
             stopped: false,
         };
         let anim = Anim {
