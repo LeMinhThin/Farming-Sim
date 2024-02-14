@@ -7,16 +7,21 @@ pub struct Player;
 #[derive(Component, Default, Debug)]
 pub struct Acceleration(pub Vec2);
 
+#[derive(Resource, Default)]
+pub struct SelectedCell(pub Option<Vec2>);
+
 #[derive(Bundle, Default)]
 pub struct PlayerBundle {
     player: Player,
     collider_bundle: ColliderBundle,
-    sprites: Anim,
+    sprites: AnimBundle,
     state: PlayerState,
+    grid_coord: GridCoords,
+    worldly: Worldly,
 }
 
 #[derive(Default, Bundle)]
-pub struct Anim {
+pub struct AnimBundle {
     pub sprites: SpriteSheetBundle,
     pub indices: AnimIndices,
     pub timer: AnimTimer,
@@ -39,19 +44,30 @@ pub struct ActionTimer(pub Timer);
 pub struct AnimIndices {
     pub first: usize,
     pub last: usize,
-    pub row: usize,
-    pub cell: usize,
     pub stopped: bool,
 }
 
 impl AnimIndices {
-    pub fn offset(&self) -> usize {
-        let sprite_count = self.last - self.first + 1;
-        self.row * sprite_count
-    }
-
     pub fn spr_count(&self) -> usize {
         self.last - self.first + 1
+    }
+
+    pub fn set_row(&mut self, new_row: usize) {
+        let count = self.spr_count();
+        let first = count * new_row;
+        if first == self.first {
+            return;
+        }
+        self.first = first;
+        self.last = first + count - 1;
+    }
+
+    pub fn row(&self) -> usize {
+        self.first / self.spr_count()
+    }
+
+    pub fn offset(&self) -> usize {
+        self.spr_count() * self.row()
     }
 }
 
@@ -64,7 +80,7 @@ pub struct ColliderBundle {
     collider: Collider,
     velocity: LinearVelocity,
     acceleration: Acceleration,
-    friction: Friction,
+    damping: LinearDamping,
 }
 
 impl From<&EntityInstance> for ColliderBundle {
@@ -73,7 +89,7 @@ impl From<&EntityInstance> for ColliderBundle {
             "Player" => Self {
                 rigid_body: RigidBody::Dynamic,
                 collider: Collider::cuboid(16., 16.),
-                friction: Friction::new(5.0),
+                damping: LinearDamping(0.5),
                 ..default()
             },
 
@@ -85,7 +101,7 @@ impl From<&EntityInstance> for ColliderBundle {
 impl LdtkEntity for PlayerBundle {
     fn bundle_entity(
         entity_instance: &EntityInstance,
-        _layer_instance: &LayerInstance,
+        layer_instance: &LayerInstance,
         _tileset: Option<&Handle<Image>>,
         _tileset_definition: Option<&TilesetDefinition>,
         asset_server: &AssetServer,
@@ -98,11 +114,9 @@ impl LdtkEntity for PlayerBundle {
         let anim_indices = AnimIndices {
             first: 0,
             last: 3,
-            row: 0,
-            cell: 0,
             stopped: false,
         };
-        let anim = Anim {
+        let anim = AnimBundle {
             sprites: SpriteSheetBundle {
                 texture_atlas: texture_atlas_handle,
                 sprite: TextureAtlasSprite::new(anim_indices.first),
@@ -116,6 +130,8 @@ impl LdtkEntity for PlayerBundle {
             collider_bundle: ColliderBundle::from(entity_instance),
             sprites: anim,
             state: PlayerState::default(),
+            grid_coord: GridCoords::from_entity_info(entity_instance, layer_instance),
+            worldly: Worldly::from_entity_info(entity_instance),
         }
     }
 }

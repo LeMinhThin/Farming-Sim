@@ -8,6 +8,8 @@ mod player;
 use components::*;
 use player::PlayerPlugin;
 
+pub const TILE_SIZE: f32 = 16.;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
@@ -16,6 +18,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, move_entities)
         .add_systems(Update, animate)
+        .init_resource::<SelectedCell>()
         .insert_resource(LevelSelection::index(0))
         .insert_resource(Gravity::ZERO)
         .register_ldtk_entity::<PlayerBundle>("Player")
@@ -55,11 +58,13 @@ fn animate(
         }
         timer.0.tick(time.delta());
         if timer.0.just_finished() {
-            let sprite_offset = indicies.offset();
-            if sprite.index >= indicies.last + sprite_offset {
-                sprite.index = indicies.first + sprite_offset
+            if sprite.index < indicies.first {
+                sprite.index = indicies.first
+            }
+            if sprite.index >= indicies.last {
+                sprite.index = indicies.first
             } else {
-                sprite.index += 1
+                sprite.index += 1;
             }
         }
     }

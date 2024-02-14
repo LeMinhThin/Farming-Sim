@@ -1,5 +1,6 @@
-use bevy::{prelude::*, transform::TransformSystem};
-use crate::components::*;
+use crate::{components::*, TILE_SIZE};
+use bevy::math::vec2;
+use bevy::{prelude::*, transform::TransformSystem, window::PrimaryWindow};
 use bevy_xpbd_2d::prelude::*;
 
 const SPEED: f32 = 100.;
@@ -38,32 +39,32 @@ fn update_player_anim(
     };
 
     let mut flip = atlas.flip_x;
-    let mut spr_row = anim.row;
+    let mut row = anim.row();
 
     if player_vel.y > 0. {
-        spr_row = 1;
+        row = 1;
         flip = false;
     }
     if player_vel.y < 0. {
-        spr_row = 0;
+        row = 0;
         flip = false;
     }
     if player_vel.x > 0. {
-        spr_row = 2;
+        row = 2;
         flip = true;
     }
     if player_vel.x < 0. {
-        spr_row = 2;
+        row = 2;
         flip = false;
     }
 
-    anim.row = spr_row;
+    anim.set_row(row);
     atlas.flip_x = flip;
     if player_vel.length() < 1. {
         anim.stopped = true;
-        atlas.index = anim.spr_count() * anim.row;
+        atlas.index = anim.offset();
     } else {
-        atlas.index = anim.spr_count() * anim.row + atlas.index % anim.spr_count();
+        //atlas.index = anim.spr_count() * anim.row + atlas.index % anim.spr_count();
         anim.stopped = false;
     }
 }
@@ -100,12 +101,13 @@ fn update_state(
     };
     if input.just_pressed(MouseButton::Left) {
         let action_timer = ActionTimer(Timer::from_seconds(0.5, TimerMode::Once));
+        let current_row = anim.row();
 
-        anim.row += 3;
-        atlas.index = anim.spr_count() * anim.row;
         anim.stopped = false;
+        anim.set_row(current_row + 3);
         vel.x = 0.;
         vel.y = 0.;
+        atlas.index = anim.spr_count() * current_row;
 
         next_state.set(PlayerState::UsingTool);
         commands.entity(player_id).insert(action_timer);
@@ -139,8 +141,9 @@ fn use_tool(
     if timer.0.just_finished() {
         commands.entity(player_id).remove::<ActionTimer>();
         next_state.set(PlayerState::Normal);
-        anim.row -= 3;
-        atlas.index = anim.spr_count() * anim.row;
+        let row = anim.row();
+        anim.set_row(row - 3);
+        atlas.index = anim.spr_count() * anim.row();
     }
 }
 
@@ -158,6 +161,43 @@ fn is_normal(player_state: Res<State<PlayerState>>) -> bool {
     };
 }
 
+fn update_selected_cell(
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    player_pos: Query<&Transform, With<Player>>,
+    mut selected_cell: ResMut<SelectedCell>,
+) {
+    let Ok(player) = player_pos.get_single() else {
+        return;
+    };
+    let window = window.single();
+    let (camera, glob_trans) = camera.single();
+    let Some(world_pos) = window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(glob_trans, cursor))
+        .map(|ray| ray.origin.truncate())
+    else {
+        return;
+    };
+
+    let map_coord = ((world_pos / TILE_SIZE).trunc() * TILE_SIZE) + vec2(TILE_SIZE, TILE_SIZE) / 2.;
+
+    selected_cell.0 = if (map_coord.x - player.translation.x).abs() > TILE_SIZE * 1.5 {
+        None
+    } else if (map_coord.y - player.translation.y).abs() > TILE_SIZE * 1.5 {
+        None
+    } else {
+        Some(map_coord)
+    }
+}
+
+fn draw_selected_cell(coord: Res<SelectedCell>, mut gizmos: Gizmos) {
+    let Some(coord) = coord.0 else {
+        return;
+    };
+    gizmos.rect_2d(coord, 0., vec2(TILE_SIZE, TILE_SIZE), Color::BLACK);
+}
+
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -165,9 +205,12 @@ impl Plugin for PlayerPlugin {
         app.add_state::<PlayerState>()
             .add_systems(
                 Update,
-                (update_player, update_player_anim, update_state).run_if(is_normal),
+                (update_player, update_player_anim, update_state)
+                    .chain()
+                    .run_if(is_normal),
             )
             .add_systems(Update, use_tool.run_if(is_using_tool))
+            .add_systems(Update, (update_selected_cell, draw_selected_cell).chain())
             .add_systems(
                 PostUpdate,
                 move_camera
