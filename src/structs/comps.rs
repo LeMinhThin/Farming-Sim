@@ -7,8 +7,16 @@ pub struct Player;
 #[derive(Component, Default, Debug)]
 pub struct Acceleration(pub Vec2);
 
-#[derive(Resource, Default)]
-pub struct SelectedCell(pub Option<Vec2>);
+#[derive(Component, Default)]
+pub struct SoilLayer;
+
+#[derive(Default)]
+pub struct TileNeighbor {
+    pub north: bool,
+    pub south: bool,
+    pub east: bool,
+    pub west: bool,
+}
 
 #[derive(Bundle, Default)]
 pub struct PlayerBundle {
@@ -38,7 +46,7 @@ pub enum PlayerState {
 pub struct AnimTimer(pub Timer);
 
 #[derive(Component, Default)]
-pub struct ActionTimer(pub Timer);
+pub struct ActionTimer(pub Timer, pub bool);
 
 #[derive(Component, Default)]
 pub struct AnimIndices {

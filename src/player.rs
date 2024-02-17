@@ -1,11 +1,13 @@
-use crate::{components::*, TILE_SIZE};
+use crate::{structs::*, TILE_SIZE};
+
 use bevy::math::vec2;
 use bevy::{prelude::*, transform::TransformSystem, window::PrimaryWindow};
+use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_xpbd_2d::prelude::*;
 
 const SPEED: f32 = 100.;
 
-fn update_player(mut player: Query<&mut LinearVelocity, With<Player>>, input: Res<Input<KeyCode>>) {
+fn move_player(mut player: Query<&mut LinearVelocity, With<Player>>, input: Res<Input<KeyCode>>) {
     let Ok(mut player) = player.get_single_mut() else {
         return;
     };
@@ -28,45 +30,41 @@ fn update_player(mut player: Query<&mut LinearVelocity, With<Player>>, input: Re
 }
 
 fn update_player_anim(
-    player: Query<&LinearVelocity, With<Player>>,
+    input: Res<Input<KeyCode>>,
     mut player_sprite: Query<(&mut AnimIndices, &mut TextureAtlasSprite), With<Player>>,
 ) {
-    let Ok(player_vel) = player.get_single() else {
-        return;
-    };
     let Ok((mut anim, mut atlas)) = player_sprite.get_single_mut() else {
         return;
     };
 
     let mut flip = atlas.flip_x;
-    let mut row = anim.row();
+    let mut row = 10;
 
-    if player_vel.y > 0. {
+    if input.pressed(KeyCode::W) {
         row = 1;
         flip = false;
     }
-    if player_vel.y < 0. {
+    if input.pressed(KeyCode::S) {
         row = 0;
         flip = false;
     }
-    if player_vel.x > 0. {
+    if input.pressed(KeyCode::D) {
         row = 2;
         flip = true;
     }
-    if player_vel.x < 0. {
+    if input.pressed(KeyCode::A) {
         row = 2;
         flip = false;
     }
 
-    anim.set_row(row);
-    atlas.flip_x = flip;
-    if player_vel.length() < 1. {
+    if row == 10 {
         anim.stopped = true;
         atlas.index = anim.offset();
-    } else {
-        //atlas.index = anim.spr_count() * anim.row + atlas.index % anim.spr_count();
-        anim.stopped = false;
+        return;
     }
+    anim.set_row(row);
+    anim.stopped = false;
+    atlas.flip_x = flip;
 }
 
 fn move_camera(
@@ -100,14 +98,14 @@ fn update_state(
         return;
     };
     if input.just_pressed(MouseButton::Left) {
-        let action_timer = ActionTimer(Timer::from_seconds(0.5, TimerMode::Once));
+        let action_timer = ActionTimer(Timer::from_seconds(0.5, TimerMode::Once), false);
         let current_row = anim.row();
 
         anim.stopped = false;
         anim.set_row(current_row + 3);
+        atlas.index = anim.spr_count() * current_row;
         vel.x = 0.;
         vel.y = 0.;
-        atlas.index = anim.spr_count() * current_row;
 
         next_state.set(PlayerState::UsingTool);
         commands.entity(player_id).insert(action_timer);
@@ -115,6 +113,27 @@ fn update_state(
 }
 
 fn use_tool(
+    mut player: Query<&mut ActionTimer, With<Player>>,
+    mut till_event: EventWriter<TillSoilEvent>,
+    time: Res<Time>,
+    selected_cell: Res<SelectedCell>,
+) {
+    let Ok(mut action) = player.get_single_mut() else {
+        return;
+    };
+    let Some(cell) = selected_cell.0 else {
+        return;
+    };
+    let cell = cell / TILE_SIZE;
+    action.0.tick(time.delta());
+    if action.0.percent() > 0.5 && !action.1 {
+        till_event.send(TillSoilEvent(TilePos::new(cell.x as u32, cell.y as u32)));
+        action.1 = true
+    }
+}
+
+fn tool_anim(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<PlayerState>>,
     mut player: Query<
         (
@@ -125,20 +144,14 @@ fn use_tool(
         ),
         With<Player>,
     >,
-    mut commands: Commands,
     time: Res<Time>,
 ) {
     let Ok((mut timer, mut anim, mut atlas, player_id)) = player.get_single_mut() else {
         return;
     };
     timer.0.tick(time.delta());
-    if timer.0.percent() > 0.5 {
-        // Really weird bug
-        // If the operation below was remove, the player's animation wouldn't play
-        // using let _ = as per the complier's help message will break the animation
-        //3 + 1;
-    }
-    if timer.0.just_finished() {
+
+    if timer.0.finished() {
         commands.entity(player_id).remove::<ActionTimer>();
         next_state.set(PlayerState::Normal);
         let row = anim.row();
@@ -148,17 +161,11 @@ fn use_tool(
 }
 
 fn is_using_tool(player_state: Res<State<PlayerState>>) -> bool {
-    return match player_state.get() {
-        PlayerState::UsingTool => true,
-        _ => false,
-    };
+    matches!(player_state.get(), PlayerState::UsingTool)
 }
 
 fn is_normal(player_state: Res<State<PlayerState>>) -> bool {
-    return match player_state.get() {
-        PlayerState::Normal => true,
-        _ => false,
-    };
+    matches!(player_state.get(), PlayerState::Normal)
 }
 
 fn update_selected_cell(
@@ -205,11 +212,11 @@ impl Plugin for PlayerPlugin {
         app.add_state::<PlayerState>()
             .add_systems(
                 Update,
-                (update_player, update_player_anim, update_state)
+                (move_player, update_player_anim, update_state)
                     .chain()
                     .run_if(is_normal),
             )
-            .add_systems(Update, use_tool.run_if(is_using_tool))
+            .add_systems(Update, (use_tool, tool_anim).run_if(is_using_tool))
             .add_systems(Update, (update_selected_cell, draw_selected_cell).chain())
             .add_systems(
                 PostUpdate,
