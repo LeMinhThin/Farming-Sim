@@ -15,8 +15,17 @@ use structs::*;
 pub const TILE_SIZE: f32 = 16.;
 const EMPTY_TILE: u32 = 10;
 
+/*
+ * IDK how I managed to get here but the code base has gotten extremely polluted and tech debt
+ * laiden. So for now, I have decided to give up on it, when the time comes I will be sure to dust
+ * off this bad boy. Goodbye for now.
+ */
+
 fn main() {
     App::new()
+        .init_resource::<SelectedCell>()
+        .init_resource::<ConnectedTileData>()
+        .init_resource::<SoilMap>()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(PhysicsPlugins::default())
         .add_plugins(LdtkPlugin)
@@ -26,8 +35,6 @@ fn main() {
         .add_systems(Update, move_entities)
         .add_systems(Update, animate)
         .add_event::<TillSoilEvent>()
-        .init_resource::<SelectedCell>()
-        .init_resource::<ConnectedTileData>()
         .insert_resource(LevelSelection::index(0))
         .insert_resource(Gravity::ZERO)
         .register_ldtk_entity::<PlayerBundle>("Player")
@@ -75,7 +82,7 @@ fn spawn_till_layer(mut commands: Commands, assets_server: Res<AssetServer>) {
             size: map_size,
             storage: tile_storage,
             texture: TilemapTexture::Single(texture),
-            transform: Transform::from_xyz(TILE_SIZE /2., TILE_SIZE / 2., 10.),
+            transform: Transform::from_xyz(TILE_SIZE / 2., TILE_SIZE / 2., 10.),
             ..Default::default()
         },
         SoilLayer,

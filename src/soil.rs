@@ -1,6 +1,7 @@
 use crate::structs::*;
 use bevy::prelude::*;
-use bevy_ecs_tilemap::helpers::square_grid::neighbors::Neighbors;
+use bevy_ecs_tilemap::helpers::square_grid::neighbors::*;
+use bevy_ecs_tilemap::helpers::square_grid::SquarePos;
 use bevy_ecs_tilemap::prelude::*;
 use std::collections::HashMap;
 
@@ -22,20 +23,6 @@ const EAST: u32 = 38;
 const EAST_WEST: u32 = 37;
 const WEST: u32 = 36;
 const INTERSECTION: u32 = 56;
-
-// Looks horrible to me
-fn to_u8(neighbors: &Neighbors<TilePos>) -> u8 {
-    let mut output: u8 = 0;
-    output |= (neighbors.north_west.is_some() as u8) << 7;
-    output |= (neighbors.north.is_some() as u8) << 6;
-    output |= (neighbors.north_east.is_some() as u8) << 5;
-    output |= (neighbors.west.is_some() as u8) << 4;
-    output |= (neighbors.east.is_some() as u8) << 3;
-    output |= (neighbors.south_west.is_some() as u8) << 2;
-    output |= (neighbors.south.is_some() as u8) << 1;
-    output |= neighbors.south_east.is_some() as u8;
-    output
-}
 
 // Don't ask
 fn init_connected_tile_data(mut tile_data: ResMut<ConnectedTileData>) {
@@ -61,21 +48,55 @@ fn init_connected_tile_data(mut tile_data: ResMut<ConnectedTileData>) {
     tile_data.0 = map;
 }
 
-fn on_till(
-    mut commands: Commands,
-    mut till_event: EventReader<TillSoilEvent>,
-    mut soil_layer: Query<(&mut TileStorage, &TilemapSize), With<SoilLayer>>,
-    texture_map: Res<ConnectedTileData>
-) {
-    let (soil_layer, map_size) = soil_layer.single_mut();
-
+fn on_till(mut till_event: EventReader<TillSoilEvent>, mut soil_layer: ResMut<SoilMap>) {
     for event in till_event.read() {
-        change_soil_texture((&soil_layer, map_size), &mut commands, &event.0, &texture_map.0)
+        let (x, y) = (event.0.x as usize, event.0.y as usize);
+        if x > soil_layer.0[0].len() {
+            warn!("till coord X out of bound");
+            return;
+        }
+        if y > soil_layer.0.len() {
+            warn!("till coord Y out of bound");
+            return;
+        }
+        soil_layer.0[y][x] = SoilState::Tilled;
     }
 }
 
+fn write_to_layer(
+    mut till_event: EventReader<TillSoilEvent>,
+    mut soil_layer: Query<&mut TileStorage, With<SoilLayer>>,
+    mut commands: Commands,
+    soil_map: Res<SoilMap>,
+    texture_map: Res<ConnectedTileData>,
+) {
+    let soil_layer = soil_layer.single_mut();
+
+    for _ in till_event.read() {
+        for row in 0..soil_map.0.len() {
+            for cell in 0..soil_map.0[0].len() {
+                let pos = TilePos::new(cell as u32, row as u32);
+                let neighbors = get_neighbors(&soil_map.0, &pos);
+                let key = neighbors_to_u8(neighbors, SoilState::Tilled);
+
+                if let Some(index) = texture_map.0.get(&key) {
+                    commands.entity(soil_layer.get(&pos).unwrap()).insert(TileTextureIndex(*index));
+                } else {
+                    commands.entity(soil_layer.get(&pos).unwrap()).insert(TileTextureIndex(CENTER));
+                }
+            }
+        }
+    }
+}
+
+/*
 // Oh my god recursion, here we go
-fn change_soil_texture(tilemap: (&TileStorage, &TilemapSize), commands:&mut Commands, pos: &TilePos, map: &HashMap<u8, u32>) {
+fn change_soil_texture(
+    tilemap: (&TileStorage, &TilemapSize),
+    commands: &mut Commands,
+    pos: &TilePos,
+    map: &HashMap<u8, u32>,
+) {
     let (storage, size) = tilemap;
     let neighbors = Neighbors::get_square_neighboring_positions(pos, size, true);
     let key = to_u8(&neighbors);
@@ -85,13 +106,64 @@ fn change_soil_texture(tilemap: (&TileStorage, &TilemapSize), commands:&mut Comm
     } else {
         index = CENTER;
     }
-    commands.entity(storage.get(pos).expect(&format!("Can't access tile index {:?}", pos))).insert(TileTextureIndex(index));
+    commands
+        .entity(
+            storage
+                .get(pos)
+                .expect(&format!("Can't access tile index {:?}", pos)),
+        )
+        .insert(TileTextureIndex(index));
 }
+*/
 
 pub struct SoilPlugin;
 impl Plugin for SoilPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, init_connected_tile_data)
-            .add_systems(Update, on_till);
+            .add_systems(Update, (on_till, write_to_layer).chain());
     }
+}
+
+fn get_neighbors(vec: &Vec<Vec<SoilState>>, cell: &TilePos) -> Vec<Option<SoilState>> {
+    let size = TilemapSize::new(vec[0].len() as u32, vec.len() as u32);
+    let square_pos = SquarePos::from(cell);
+    let func = |direction: SquareDirection| square_pos.offset(&direction).as_tile_pos(&size);
+
+    let neighbors = Neighbors::from_directional_closure(func);
+    let neighbors = neighbors_to_array(&neighbors);
+    neighbors
+        .into_iter()
+        .map(|elem| {
+            if let Some(index) = elem {
+                Some(vec[index.y as usize][index.x as usize])
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn neighbors_to_u8(neighbors: Vec<Option<SoilState>>, match_cond: SoilState) -> u8 {
+    let mut ret = u8::MIN;
+    let mut counter = 0;
+    for i in 7..=0 {
+        if Some(match_cond) == neighbors[counter] {
+            ret |= 1 << i
+        }
+        counter += 1;
+    }
+    ret
+}
+
+const fn neighbors_to_array(neighbors: &Neighbors<TilePos>) -> [Option<TilePos>; 8] {
+    [
+        neighbors.north_west,
+        neighbors.north,
+        neighbors.north_east,
+        neighbors.west,
+        neighbors.east,
+        neighbors.south_west,
+        neighbors.south,
+        neighbors.south_east,
+    ]
 }
